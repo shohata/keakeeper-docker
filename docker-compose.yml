@@ -1,7 +1,6 @@
 volumes:
   database:
   kea-socket:
-  kea-config:
 
 services:
   keakeeper:
@@ -86,7 +85,9 @@ services:
         ipv4_address: 172.18.0.22
     volumes:
       - kea-socket:/run/kea
-      - kea-config:/etc/kea
+      - type: bind
+        source: ./config/kea # configuration files
+        target: /etc/kea
 
   db:
     image: mariadb:11.5
