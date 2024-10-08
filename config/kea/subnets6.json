@@ -1,0 +1,18 @@
+"subnet6": [
+  {
+    "id": 1,
+    "subnet": "2001:db8:1::/64",
+    "pools": [
+      {
+        "pool": "2001:db8:1::50-2001:db8:1::100"
+      }
+    ],
+    "interface": "eth0",
+    "option-data": [
+      {
+        "name": "dns-servers",
+        "data": "2001:db8:2::dead:beef, 2001:db8:2::cafe:babe"
+      }
+    ]
+  }
+]

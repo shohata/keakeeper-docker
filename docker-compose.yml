@@ -1,0 +1,126 @@
+volumes:
+  database:
+  kea-socket:
+  kea-config:
+
+services:
+  keakeeper:
+    build:
+      context: ./keakeeper
+      target: keakeeper
+    restart: always
+    depends_on:
+      - keakeeper-php
+    networks:
+      kea-20-backend:
+        ipv4_address: 172.18.0.10
+    ports:
+      - 8000:80
+
+  keakeeper-php:
+    build:
+      context: ./keakeeper
+      target: keakeeper-php
+    restart: always
+    depends_on:
+      - kea4
+      - kea6
+    networks:
+      kea-20-backend:
+        ipv4_address: 172.18.0.11
+    volumes:
+      - type: bind
+        source: ./config/kea # configuration files
+        target: /etc/kea
+
+  kea-ctrl-agent:
+    build:
+      context: ./kea-dhcp
+      target: kea-ctrl-agent
+    restart: always
+    depends_on: # delay start until database is ready
+      db:
+        condition: service_healthy
+    networks:
+      kea-20-backend: # internal network for communication with database
+        ipv4_address: 172.18.0.20
+    volumes:
+      - kea-socket:/run/kea
+      - type: bind
+        source: ./config/kea # configuration files
+        target: /etc/kea
+
+  kea4:
+    build:
+      context: ./kea-dhcp
+      target: kea4
+    restart: always
+    depends_on: # delay start until database is ready
+      db:
+        condition: service_healthy
+    networks:
+      kea-10-ipvlan: # network that binds container to host network interface.
+        ipv4_address: ${IP4} # ip for kea4 server
+        ipv6_address: ${IP4_V6} # set static to avoid conflicts with kea6
+      kea-20-backend: # internal network for communication with database
+        ipv4_address: 172.18.0.21
+    volumes:
+      - kea-socket:/run/kea
+      - type: bind
+        source: ./config/kea # configuration files
+        target: /etc/kea
+
+  kea6:
+    build:
+      context: ./kea-dhcp
+      target: kea6
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      kea-10-ipvlan: # network that binds container to host network interface.
+        ipv4_address: ${IP6_V4} # ip for kea6 server
+        ipv6_address: ${IP6} # set static to avoid conflicts with kea4
+      kea-20-backend: # internal network for communication with database
+        ipv4_address: 172.18.0.22
+    volumes:
+      - kea-socket:/run/kea
+      - kea-config:/etc/kea
+
+  db:
+    image: mariadb:11.5
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -u $$MARIDB_USER -p$$MARIDB_PASSWORD -e 'SELECT version FROM schema_version' $$MARIADB_DATABASE"]
+    environment:
+      MARIADB_DATABASE: kea
+      MARIDB_USER: keauser
+      MARIDB_PASSWORD: password
+      MARIADB_ROOT_PASSWORD: password
+    networks:
+      kea-20-backend:
+        ipv4_address: 172.18.0.30
+    volumes:
+      - database:/var/lib/mysql
+      - type: bind
+        source: ./initdb # database setup script from kea for first run
+        target: /docker-entrypoint-initdb.d
+
+
+networks:
+  kea-10-ipvlan: # network that binds container to host network interface.
+    name: kea-10-ipvlan
+    driver: ipvlan
+    driver_opts:
+      parent: ${ETH} #  host interface that kea containers will use !!!!!!
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${SUBNET4} # subnet for kea4 server
+        - subnet: ${SUBNET6} # subnet for kea6 server
+  kea-20-backend: # internal network for communication with database
+    name: kea-20-backend
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
